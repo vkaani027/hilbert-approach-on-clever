@@ -20,7 +20,7 @@ def extract_lean_code(text_input: str) -> str:
     matches = re.findall(r'```lean\n(.*?)\n```', text_input, re.DOTALL)
     if matches:
         return matches[-1].strip()
-    return text_input.strip()
+    raise ValueError('formalizer output missing Lean code block')
 
 
 class Formalizer:

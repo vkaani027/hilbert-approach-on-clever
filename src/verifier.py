@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import subprocess
 import tempfile
@@ -14,11 +14,12 @@ class VerificationResult:
 
 
 class LeanVerifier:
-    def __init__(self, lean_command: str, timeout_seconds: int = 60):
+    def __init__(self, lean_command: str, timeout_seconds: int = 60, max_retries: int = 0):
         self.lean_command = lean_command
         self.timeout_seconds = timeout_seconds
+        self.max_retries = max_retries
 
-    def verify(self, lean_code: str, workdir: Path | None = None) -> VerificationResult:
+    def _run_once(self, lean_code: str, workdir: Path | None = None) -> VerificationResult:
         with tempfile.NamedTemporaryFile('w', suffix='.lean', delete=False, encoding='utf-8') as f:
             f.write(lean_code)
             temp_path = Path(f.name)
@@ -37,3 +38,12 @@ class LeanVerifier:
             return VerificationResult(False, f'Timeout after {self.timeout_seconds}s: {exc}', -1)
         finally:
             temp_path.unlink(missing_ok=True)
+
+    def verify(self, lean_code: str, workdir: Path | None = None) -> VerificationResult:
+        last_result = None
+        for _ in range(self.max_retries + 1):
+            last_result = self._run_once(lean_code, workdir)
+            if last_result.success:
+                return last_result
+        assert last_result is not None
+        return last_result

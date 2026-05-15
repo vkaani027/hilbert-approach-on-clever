@@ -1,16 +1,16 @@
 ﻿# Input and output paths
 data:
-  input_path: "../converted_proofs.jsonl"
-  output_dir: "../results"
-  proofs_dir: "../proofs"
-  traces_dir: "../traces"
+  input_path: "./converted_proofs.jsonl"
+  output_dir: "./results"
+  proofs_dir: "./proofs"
+  traces_dir: "./traces"
   max_samples: null
   input_format: "auto"
   workers: 8
 
 # Local formal prover model served through vLLM / OpenAI-compatible API
 formal_llm:
-  base_url: "http://127.0.0.1:8000/v1"
+  base_url: "http://0.0.0.0:8010/v1"
   api_key: "empty"
   model: "Goedel-Prover-V2-8B"
   temperature: 0.2
@@ -20,7 +20,7 @@ formal_llm:
 informal_llm:
   base_url: "http://yunwu.ai/v1"
   api_key: "replace-me"
-  model: "gpt-oss-120b"
+  model: "gpt-5.5"
   temperature: 0.3
   max_tokens: 1024
 
@@ -42,12 +42,11 @@ workflow:
 prompts:
   formal_system: "You are a formal Lean prover. Produce Lean code only."
   informal_plan_system: "Generate a proof plan without Lean code."
-  informal_continue_system: "You are deciding whether a Lean theorem attempt should continue. Output exactly one label on the first line: CONTINUE, IMPOSSIBLE, or DECOMPOSE. Optionally add one short explanation line after the label. Do not output Lean code."
-  informal_impossible_system: "You are deciding whether a Lean theorem attempt is impossible. Output exactly one label on the first line: CONTINUE, IMPOSSIBLE, or DECOMPOSE. Optionally add one short explanation line after the label. Do not output Lean code."
-  informal_decompose_system: "You are deciding whether the theorem should be split into lemmas. Output exactly one label on the first line: DECOMPOSE. On the following lines, output a numbered list of natural-language lemmas in the format `1. ...`, `2. ...`, and so on. If decomposition is not needed, output CONTINUE or IMPOSSIBLE instead. Do not output Lean proof code."
+  informal_decision_system: "You are deciding the next action after a failed Lean proof attempt. Output exactly one label on the first line: CONTINUE, DECOMPOSE, or IMPOSSIBLE. CONTINUE means the proof looks close and the next attempt should continue without regenerating the plan. DECOMPOSE means the theorem looks too hard and should be split into lemmas. IMPOSSIBLE means the current proof attempt shows no progress and the theorem appears unprovable with the current approach. After the first line, you may add one short explanation line. Do not output Lean code."
   proof_plan_prefix: "Proof plan:"
   previous_attempt_prefix: "Previous proof attempt:"
   verifier_error_prefix: "Verifier error:"
+  formal_skeleton_instruction: "The theorem proof skeleton already contains all prerequisite lemmas above. You must prove only the bottom-most theorem currently being attempted. Do not re-prove or modify the preceding lemma statements. Assume every lemma in the skeleton is already established unless you are explicitly filling the lowest theorem in the current proof block. Fill only that bottom-most proof."
 
 # Runtime logging and trace settings
 runtime:
@@ -57,7 +56,7 @@ runtime:
 
 # Lemma formalizer: converts natural-language lemma statements into Lean theorem statements
 formalizer_llm:
-  base_url: "http://127.0.0.1:8002/v1"
+  base_url: "http://0.0.0.0:8011/v1"
   api_key: "empty"
   model: "Goedel-Formalizer-V2-8B"
   temperature: 0.9
@@ -67,3 +66,6 @@ formalizer_prompt:
   system: "You are an expert in mathematics and Lean 4. Translate natural-language lemmas into Lean theorem statements only."
   user_template: "Please autoformalize the following natural-language lemma in Lean 4. Use the following theorem name: {problem_name}\nThe natural-language lemma is:\n{nl_statement}\nThink before you provide the lean statement."
   code_block_language: "lean4"
+
+
+
