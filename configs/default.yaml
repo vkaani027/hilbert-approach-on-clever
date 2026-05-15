@@ -1,0 +1,49 @@
+﻿data:
+  input_path: "../converted_proofs.jsonl"
+  output_dir: "../results"
+  proofs_dir: "../proofs"
+  traces_dir: "../traces"
+  max_samples: null
+  input_format: "auto"
+  workers: 8
+
+formal_llm:
+  base_url: "http://127.0.0.1:8000/v1"
+  api_key: "empty"
+  model: "Goedel-Prover-V2-8B"
+  temperature: 0.2
+  max_tokens: 2048
+
+informal_llm:
+  base_url: "http://yunwu.ai/v1"
+  api_key: "replace-me"
+  model: "gpt-oss-120b"
+  temperature: 0.3
+  max_tokens: 1024
+
+verifier:
+  lean_command: "lake env lean"
+  timeout_seconds: 60
+  max_retries: 3
+
+workflow:
+  max_formal_attempts: 4
+  max_outer_loops: 3
+  max_lemma_rounds: 3
+  max_lemma_count: 5
+  allow_sorry_for_lemmas: true
+  require_formal_validation: true
+
+prompts:
+  formal_system: "You are a formal Lean prover. Produce Lean code only."
+  informal_plan_system: "Generate a proof plan without Lean code."
+  informal_continue_system: "Decide whether the theorem is still doable. Output a short reasoning plan only, no Lean code."
+  informal_impossible_system: "Decide whether the theorem is impossible. Output a concise explanation only, no Lean code."
+  informal_decompose_system: "Decide whether the theorem should be split into lemmas. Output a short bullet list of lemmas only, no Lean code."
+  proof_plan_prefix: "Proof plan:"
+  previous_attempt_prefix: "Previous proof attempt:"
+  verifier_error_prefix: "Verifier error:"
+
+runtime:
+  log_level: "INFO"
+  save_intermediate_prompts: true

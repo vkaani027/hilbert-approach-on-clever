@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my_method"
+version = "0.1.0"
+description = "Two-LLM Lean proof search pipeline"
+requires-python = ">=3.10"
+dependencies = [
+  "pyyaml",
+  "pydantic>=2.0",
+  "httpx",
+  "openai",
+  "tenacity",
+  "tqdm",
+]
+
+[project.scripts]
+my-method = "src.main:main"
