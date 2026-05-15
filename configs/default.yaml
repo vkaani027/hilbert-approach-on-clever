@@ -6,7 +6,7 @@ data:
   traces_dir: "./traces"
   max_samples: null
   input_format: "auto"
-  workers: 8
+  workers: 9
 
 # Local formal prover model served through vLLM / OpenAI-compatible API
 formal_llm:
