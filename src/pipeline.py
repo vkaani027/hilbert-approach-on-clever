@@ -7,13 +7,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 
 from .dataset import load_problems
+from .formalizer import Formalizer
 from .llm import LLMConfig, OpenAILLM
+from .logger import RunLogger
+from .lemma_tree import LemmaTree, LemmaNode
 from .prompts import PromptBank
 from .types import RunResult, Problem
 from .verifier import LeanVerifier
-from .workflow import write_result_files, parse_decision, parse_lemma_list
-from .logger import RunLogger
-from .lemma_tree import LemmaTree, LemmaNode
+from .workflow import write_result_files, parse_decision, parse_lemma_list, ensure_required_contents
 
 
 def _make_llm(section: dict) -> OpenAILLM:
@@ -25,7 +26,7 @@ def _save_trace(traces_dir: Path, name: str, payload: dict) -> None:
     (traces_dir / f"{name}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
-def _prove_problem(problem: Problem, formal: OpenAILLM, informal: OpenAILLM, verifier: LeanVerifier, config: dict, prompts: PromptBank, traces_dir: Path, proofs_dir: Path, logger: RunLogger, tree: LemmaTree, parent: LemmaNode | None = None) -> RunResult:
+def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, informal: OpenAILLM, verifier: LeanVerifier, config: dict, prompts: PromptBank, traces_dir: Path, proofs_dir: Path, logger: RunLogger, tree: LemmaTree, parent: LemmaNode | None = None) -> RunResult:
     start = perf_counter()
     max_formal_attempts = config['workflow']['max_formal_attempts']
     max_outer_loops = config['workflow']['max_outer_loops']
@@ -35,18 +36,26 @@ def _prove_problem(problem: Problem, formal: OpenAILLM, informal: OpenAILLM, ver
     informal_plan = ''
     lemmas: list[str] = []
     current_node = parent or tree.root
+    header = problem.header
+    theorem = problem.formal_statement.strip()
 
     logger.emit(problem.name, 'start', 'begin theorem')
+    logger.emit(problem.name, 'input', 'input is treated as Lean code; main theorem is not formalized')
+
     for outer_index in range(max_outer_loops):
         logger.emit(problem.name, 'informal_plan', f'planning round {outer_index + 1}/{max_outer_loops}')
         informal_plan = informal.complete(prompts.informal_plan(problem))
         for attempt_index in range(max_formal_attempts):
             logger.emit(problem.name, 'formal_attempt', f'formal attempt {attempt_index + 1}/{max_formal_attempts}')
             proof_code = formal.complete(prompts.formal_proof(problem, proof_code, verifier_error, informal_plan))
-            verification = verifier.verify(problem.header + '\n' + proof_code)
+            if not ensure_required_contents(proof_code, ['by']):
+                verifier_error = 'formal proof output missing required Lean contents'
+                logger.emit(problem.name, 'verify_fail', verifier_error)
+                continue
+            verification = verifier.verify(header + '\n' + theorem + '\n' + proof_code)
             if verification.success:
                 proof_path = proofs_dir / f'{problem.name}.lean'
-                proof_path.write_text(problem.header + '\n' + proof_code, encoding='utf-8')
+                proof_path.write_text(header + '\n' + theorem + '\n' + proof_code, encoding='utf-8')
                 result = RunResult(problem.name, 'success', str(proof_path), perf_counter() - start, '')
                 _save_trace(traces_dir, problem.name, {'problem': asdict(problem), 'informal_plan': informal_plan, 'proof_code': proof_code, 'result': asdict(result), 'lemmas': lemmas})
                 logger.emit(problem.name, 'success', f'solved in {result.elapsed_seconds:.1f}s')
@@ -62,14 +71,36 @@ def _prove_problem(problem: Problem, formal: OpenAILLM, informal: OpenAILLM, ver
             _save_trace(traces_dir, problem.name, {'problem': asdict(problem), 'informal_plan': informal_plan, 'decision': decision_text, 'result': asdict(result), 'lemmas': lemmas})
             logger.emit(problem.name, 'failed', 'marked impossible')
             return result
+
         if decision == 'decompose':
             lemma_text = informal.complete(prompts.informal_decision(problem, verifier_error, proof_code, 'decompose'))
+            if not lemma_text.strip():
+                raise ValueError(f'empty lemma decomposition for {problem.name}')
             lemmas = parse_lemma_list(lemma_text)[: config['workflow']['max_lemma_count']]
+            if not lemmas:
+                raise ValueError(f'failed to parse lemma list for {problem.name}')
             lemma_nodes = tree.add_children(current_node, lemmas)
             logger.emit(problem.name, 'decompose', f'expanded into {len(lemmas)} lemmas')
+
             for lemma_round, (lemma, lemma_node) in enumerate(zip(lemmas[:max_lemma_rounds], lemma_nodes[:max_lemma_rounds])):
-                lemma_problem = Problem(name=f'{problem.name}__lemma_{lemma_round}', header=problem.header, formal_statement=lemma, informal_prefix=problem.informal_prefix, split=problem.split, extra=problem.extra)
-                lemma_result = _prove_problem(lemma_problem, formal, informal, verifier, config, prompts, traces_dir, proofs_dir, logger, tree, lemma_node)
+                lemma_name = f'{problem.name}__lemma_{lemma_round}'
+                formalized_result = formalizer.formalize(problem, theorem_name=lemma_name, informal_statement=lemma)
+                if not ensure_required_contents(formalized_result.theorem_code, ['theorem']):
+                    raise ValueError(f'formalizer output missing theorem keyword for {lemma_name}')
+                lemma_problem = Problem(
+                    name=lemma_name,
+                    header=problem.header,
+                    formal_statement=formalized_result.theorem_code,
+                    informal_prefix=problem.informal_prefix,
+                    split=problem.split,
+                    extra={**problem.extra, 'source_lemma_text': lemma, 'formalizer_raw_output': formalized_result.raw_output},
+                )
+                _save_trace(traces_dir, lemma_name, {
+                    'source_lemma_text': lemma,
+                    'formalized_lemma': formalized_result.theorem_code,
+                    'formalizer_raw_output': formalized_result.raw_output,
+                })
+                lemma_result = _prove_problem(lemma_problem, formalizer, formal, informal, verifier, config, prompts, traces_dir, proofs_dir, logger, tree, lemma_node)
                 if lemma_result.status != 'success':
                     result = RunResult(problem.name, 'failed', None, perf_counter() - start, f'lemma failed: {lemma}')
                     _save_trace(traces_dir, problem.name, {'problem': asdict(problem), 'informal_plan': informal_plan, 'decision': decision_text, 'lemmas': lemmas, 'result': asdict(result)})
@@ -86,6 +117,7 @@ def _prove_problem(problem: Problem, formal: OpenAILLM, informal: OpenAILLM, ver
 
 def run_pipeline(config):
     data = config.raw['data']
+    formalizer = Formalizer(config.raw['formalizer_llm'], config.raw['formalizer_prompt'])
     formal = _make_llm(config.raw['formal_llm'])
     informal = _make_llm(config.raw['informal_llm'])
     verifier = LeanVerifier(**config.raw['verifier'])
@@ -113,7 +145,7 @@ def run_pipeline(config):
             future_map = {}
             for problem in problems:
                 tree = LemmaTree(problem.name)
-                future = executor.submit(_prove_problem, problem, formal, informal, verifier, config.raw, prompts, traces_dir, proofs_dir, logger, tree)
+                future = executor.submit(_prove_problem, problem, formalizer, formal, informal, verifier, config.raw, prompts, traces_dir, proofs_dir, logger, tree)
                 future_map[future] = (problem, tree)
             for future in as_completed(future_map):
                 problem, tree = future_map[future]
@@ -124,7 +156,7 @@ def run_pipeline(config):
     else:
         for problem in problems:
             tree = LemmaTree(problem.name)
-            result = _prove_problem(problem, formal, informal, verifier, config.raw, prompts, traces_dir, proofs_dir, logger, tree)
+            result = _prove_problem(problem, formalizer, formal, informal, verifier, config.raw, prompts, traces_dir, proofs_dir, logger, tree)
             tree.save(traces_dir / f'{problem.name}_lemma_tree.json')
             write_result_files(output_dir, result, '')
             results.append(asdict(result))

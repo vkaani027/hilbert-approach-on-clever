@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
@@ -29,18 +29,34 @@ def elapsed(start: float) -> float:
 
 
 def parse_decision(text: str) -> str:
-    lowered = text.lower()
-    if 'impossible' in lowered or '???' in lowered or 'fail' in lowered:
-        return 'impossible'
-    if 'lemma' in lowered or '??' in lowered or 'decompose' in lowered or '?' in lowered:
-        return 'decompose'
-    return 'continue'
+    first_line = text.strip().splitlines()[0].strip().upper() if text.strip() else ''
+    if first_line in {'CONTINUE', 'IMPOSSIBLE', 'DECOMPOSE'}:
+        return first_line.lower()
+    raise ValueError(f'invalid decision label: {first_line!r}')
 
 
 def parse_lemma_list(text: str) -> list[str]:
-    lines = []
+    lemmas = []
+    started = False
     for line in text.splitlines():
-        stripped = line.strip('-? 	')
-        if stripped:
-            lines.append(stripped)
-    return lines[:5]
+        stripped = line.strip()
+        if not stripped:
+            continue
+        upper = stripped.upper()
+        if not started and upper in {'CONTINUE', 'IMPOSSIBLE', 'DECOMPOSE'}:
+            started = True
+            continue
+        if started:
+            if stripped[:1].isdigit() and '.' in stripped[:4]:
+                lemma_text = stripped.split('.', 1)[1].strip()
+                if lemma_text:
+                    lemmas.append(lemma_text)
+            elif stripped.startswith(('-', '*', '•')):
+                lemma_text = stripped[1:].strip()
+                if lemma_text:
+                    lemmas.append(lemma_text)
+    return lemmas[:5]
+
+
+def ensure_required_contents(text: str, required: list[str]) -> bool:
+    return all(part in text for part in required)

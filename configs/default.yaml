@@ -1,27 +1,17 @@
 ﻿# Input and output paths
 data:
-  # Path to the benchmark file produced from converted_proofs*.json or .jsonl
   input_path: "../converted_proofs.jsonl"
-  # Directory for per-theorem result JSON files and summary files
   output_dir: "../results"
-  # Directory where successful Lean proof files are saved
   proofs_dir: "../proofs"
-  # Directory where prompt / verifier traces are saved
   traces_dir: "../traces"
-  # Optional limit on how many samples to process; null means all samples
   max_samples: null
-  # Kept for future expansion; JSONL is the primary format
   input_format: "auto"
-  # Number of parallel theorem workers
   workers: 8
 
-# Local formal model served through vLLM / OpenAI-compatible API
+# Local formal prover model served through vLLM / OpenAI-compatible API
 formal_llm:
-  # Base URL for the local OpenAI-compatible endpoint
   base_url: "http://127.0.0.1:8000/v1"
-  # API key placeholder; keep any non-empty value if the server requires it
   api_key: "empty"
-  # Model name exposed by the local server
   model: "Goedel-Prover-V2-8B"
   temperature: 0.2
   max_tokens: 2048
@@ -30,55 +20,50 @@ formal_llm:
 informal_llm:
   base_url: "http://yunwu.ai/v1"
   api_key: "replace-me"
-  # Do not include provider prefixes such as openai/
   model: "gpt-oss-120b"
   temperature: 0.3
   max_tokens: 1024
 
 # Lean verifier settings
 verifier:
-  # Shell command used to verify generated Lean code
   lean_command: "lake env lean"
-  # Maximum seconds allowed for each verification attempt
   timeout_seconds: 60
-  # Reserved for future verifier retry logic
   max_retries: 3
 
 # Iteration limits and decomposition strategy
 workflow:
-  # Max formal proof attempts before asking Informal LLM for a decision
   max_formal_attempts: 4
-  # Max outer continue/replan cycles per theorem
   max_outer_loops: 3
-  # Max lemma recursion rounds after decomposition
   max_lemma_rounds: 3
-  # Maximum number of lemmas to keep from one decomposition
   max_lemma_count: 5
-  # Whether lemmas may temporarily use sorry during intermediate stages
-  allow_sorry_for_lemmas: true
-  # Require final formal validation before marking success
   require_formal_validation: true
 
 # Prompt templates
 prompts:
   formal_system: "You are a formal Lean prover. Produce Lean code only."
   informal_plan_system: "Generate a proof plan without Lean code."
-  informal_continue_system: "Decide whether the theorem is still doable. Output a short reasoning plan only, no Lean code."
-  informal_impossible_system: "Decide whether the theorem is impossible. Output a concise explanation only, no Lean code."
-  informal_decompose_system: "Decide whether the theorem should be split into lemmas. Output a short bullet list of lemmas only, no Lean code."
+  informal_continue_system: "You are deciding whether a Lean theorem attempt should continue. Output exactly one label on the first line: CONTINUE, IMPOSSIBLE, or DECOMPOSE. Optionally add one short explanation line after the label. Do not output Lean code."
+  informal_impossible_system: "You are deciding whether a Lean theorem attempt is impossible. Output exactly one label on the first line: CONTINUE, IMPOSSIBLE, or DECOMPOSE. Optionally add one short explanation line after the label. Do not output Lean code."
+  informal_decompose_system: "You are deciding whether the theorem should be split into lemmas. Output exactly one label on the first line: DECOMPOSE. On the following lines, output a numbered list of natural-language lemmas in the format `1. ...`, `2. ...`, and so on. If decomposition is not needed, output CONTINUE or IMPOSSIBLE instead. Do not output Lean proof code."
   proof_plan_prefix: "Proof plan:"
   previous_attempt_prefix: "Previous proof attempt:"
   verifier_error_prefix: "Verifier error:"
 
+# Runtime logging and trace settings
 runtime:
-  log_level: "INFO"
-  save_intermediate_prompts: true
-
-# Runtime logging
-runtime:
-  # Print human-readable progress messages to the terminal
   show_progress: true
-  # Persist event logs to traces/events.jsonl
   save_event_log: true
-  # Save lemma tree JSON files under traces/
   save_lemma_tree: true
+
+# Lemma formalizer: converts natural-language lemma statements into Lean theorem statements
+formalizer_llm:
+  base_url: "http://127.0.0.1:8002/v1"
+  api_key: "empty"
+  model: "Goedel-Formalizer-V2-8B"
+  temperature: 0.9
+  max_tokens: 4096
+
+formalizer_prompt:
+  system: "You are an expert in mathematics and Lean 4. Translate natural-language lemmas into Lean theorem statements only."
+  user_template: "Please autoformalize the following natural-language lemma in Lean 4. Use the following theorem name: {problem_name}\nThe natural-language lemma is:\n{nl_statement}\nThink before you provide the lean statement."
+  code_block_language: "lean4"
