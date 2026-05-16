@@ -10,30 +10,51 @@ class PromptBank:
     def informal_plan(self, problem: Problem) -> list[dict[str, str]]:
         return [
             {'role': 'system', 'content': self.config['prompts']['informal_plan_system']},
-            {'role': 'user', 'content': problem.informal_prefix + '\n' + problem.formal_statement},
+            {'role': 'user', 'content': (
+                'Task: produce a concise proof plan for the Lean problem below.\n\n'
+                f'Lean header:\n{problem.header}\n\n'
+                f'Theorem statement:\n{problem.formal_statement}\n\n'
+                f'Problem description:\n{problem.informal_prefix}\n\n'
+                'Requirements:\n'
+                '- Output natural language only.\n'
+                '- Do not output Lean code.\n'
+                '- Focus on the current theorem and its context.\n'
+                '- Keep the plan concise and actionable.'
+            )},
         ]
 
     def informal_decision(self, problem: Problem, verifier_error: str, proof_code: str) -> list[dict[str, str]]:
         return [
             {'role': 'system', 'content': self.config['prompts']['informal_decision_system']},
             {'role': 'user', 'content': (
-                'Decide the next action after a failed Lean proof attempt.\n'
-                'Choose exactly one label on the first line: CONTINUE, DECOMPOSE, or IMPOSSIBLE.\n'
-                'CONTINUE means the proof looks close and the next attempt should continue without regenerating the plan.\n'
-                'DECOMPOSE means the theorem looks too hard and should be split into lemmas. If you choose DECOMPOSE, you must also provide a numbered list of natural-language lemmas on the following lines. The lemmas must be independent: do not make later lemmas depend on earlier lemmas by name or by assuming only their conclusions; if a logical intermediate statement is needed, include it in full.\n'
-                'IMPOSSIBLE means the current proof attempt shows no progress and the theorem appears unprovable with the current approach.\n'
-                'After the first line, you may add one short explanation line. Do not output Lean code.\n\n'
+                'Task: decide the next action after the failed Lean proof attempt below.\n\n'
                 f'Lean header:\n{problem.header}\n\n'
-                f'Lean statement:\n{problem.formal_statement}\n\n'
+                f'Theorem statement:\n{problem.formal_statement}\n\n'
                 f'Previous proof attempt:\n{proof_code}\n\n'
-                f'Verifier error:\n{verifier_error}\n'
+                f'Verifier error:\n{verifier_error}\n\n'
+                'Requirements:\n'
+                '- Output exactly one label on the first line: CONTINUE, DECOMPOSE, or IMPOSSIBLE.\n'
+                '- CONTINUE means the proof looks close and the next attempt should continue without regenerating the plan.\n'
+                '- DECOMPOSE means the theorem is too hard and should be split into independent lemmas.\n'
+                '- IMPOSSIBLE means the current proof attempt shows no progress and the theorem appears unprovable with the current approach.\n'
+                '- After the first line, you may add one short explanation line.\n'
+                '- Do not output Lean code.\n'
+                '- If you choose DECOMPOSE, the lemmas must be independent and self-contained.'
             )},
         ]
 
     def formal_proof(self, problem: Problem, proof_code: str, verifier_error: str, informal_plan: str) -> list[dict[str, str]]:
         messages = [
             {'role': 'system', 'content': self.config['prompts']['formal_system']},
-            {'role': 'user', 'content': problem.header + '\n' + problem.formal_statement},
+            {'role': 'user', 'content': (
+                'Task: prove the Lean theorem below.\n\n'
+                f'Lean header:\n{problem.header}\n\n'
+                f'Theorem statement:\n{problem.formal_statement}\n\n'
+                'Additional instructions:\n'
+                '- Use the current Lean context and any provided plan or prior attempts.\n'
+                '- Do not get stuck in repetitive self-checking loops; make decisive progress.\n'
+                '- Return only Lean code. Do not explain your reasoning.'
+            )},
         ]
         if informal_plan:
             messages.append({'role': 'assistant', 'content': self.config['prompts']['proof_plan_prefix'] + '\n' + informal_plan})

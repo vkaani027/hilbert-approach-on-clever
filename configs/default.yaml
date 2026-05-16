@@ -40,13 +40,13 @@ workflow:
 
 # Prompt templates
 prompts:
-  formal_system: "You are a formal Lean prover. Produce Lean code only."
-  informal_plan_system: "Generate a proof plan without Lean code."
-  informal_decision_system: "You are deciding the next action after a failed Lean proof attempt. Output exactly one label on the first line: CONTINUE, DECOMPOSE, or IMPOSSIBLE. CONTINUE means the proof looks close and the next attempt should continue without regenerating the plan. DECOMPOSE means the theorem looks too hard and should be split into lemmas. IMPOSSIBLE means the current proof attempt shows no progress and the theorem appears unprovable with the current approach. After the first line, you may add one short explanation line. Do not output Lean code."
-  proof_plan_prefix: "Proof plan:"
+  formal_system: "You are a strong Lean prover."
+  informal_plan_system: "You are a strong Lean proof planner."
+  informal_decision_system: "You are a strong Lean proof selector."
+  proof_plan_prefix: "Current proof plan:"
   previous_attempt_prefix: "Previous proof attempt:"
   verifier_error_prefix: "Verifier error:"
-  formal_skeleton_instruction: "The theorem proof skeleton already contains all prerequisite lemmas above. You must prove only the bottom-most theorem currently being attempted. Do not re-prove or modify the preceding lemma statements. Assume every lemma in the skeleton is already established unless you are explicitly filling the lowest theorem in the current proof block. Fill only that bottom-most proof."
+  formal_skeleton_instruction: "You are proving the bottom-most theorem in a Lean proof skeleton. The prompt includes the current Lean header, the theorem statement, and possibly earlier lemmas that are already assumed established. Do not re-prove or modify the earlier lemmas. Only fill in the proof for the current bottom-most theorem. Output Lean code only. Do not get stuck in repetitive self-checking loops; if the current direction is not working, make a decisive progress step."
 
 # Runtime logging and trace settings
 runtime:
@@ -63,9 +63,6 @@ formalizer_llm:
   max_tokens: 4096
 
 formalizer_prompt:
-  system: "You are an expert in mathematics and Lean 4. Translate natural-language lemmas into Lean theorem statements only. Output Lean code only."
-  user_template: "We are constructing a proof for the following Lean problem.\n\nCurrent Lean context:\n{header}\n\nCurrent theorem to prove:\n{theorem}\n\nOur current proof plan:\n{plan}\n\nYou should generate a Lean theorem statement for the following natural-language description:\n{nl_statement}\n\nRequirements:\n- Output only the Lean theorem statement and no explanation.\n- Make the statement compatible with the current Lean context.\n- Preserve the theorem name: {problem_name}"
+  system: "You are a strong Lean prover."
+  user_template: "Task: generate a Lean theorem statement for the lemma below.\n\nInput:\n- Lean header:\n{header}\n- Current theorem to prove:\n{theorem}\n- Current proof plan:\n{plan}\n- Natural-language description:\n{nl_statement}\n\nRequirements:\n- Output only Lean code.\n- Generate a theorem statement that is compatible with the current Lean context.\n- Preserve the theorem name: {problem_name}.\n- Do not add explanation or commentary."
   code_block_language: "lean4"
-
-
-
