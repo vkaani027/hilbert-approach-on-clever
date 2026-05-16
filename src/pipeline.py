@@ -60,13 +60,7 @@ def _make_sorry_skeleton(header: str, theorem: str, lemma_statements: list[str])
         statement = statement.strip()
         if not statement:
             continue
-        lemma_name = f'lemma_{index}'
-        named_lemmas.append(lemma_name)
-        if statement.startswith('lemma ') or statement.startswith('theorem '):
-            if ':=' not in statement:
-                statement = statement + ' := by\n  sorry'
-        else:
-            statement = f'lemma {lemma_name} : {statement} := by\n  sorry'
+        named_lemmas.append(f'lemma_{index}')
         sections.append(statement)
     theorem_block = theorem.rstrip()
     if not theorem_block.startswith('theorem '):
@@ -85,6 +79,22 @@ def _fill_skeleton_with_formal(problem: Problem, formal: OpenAILLM, informal_pla
     if verifier_error:
         messages.append({'role': 'user', 'content': 'Verifier error:\n' + verifier_error})
     return formal.complete(messages)
+
+
+def _extract_formal_output(text: str) -> str:
+    marker = '### Complete Lean 4 Proof\n\nlean4'
+    index = text.rfind(marker)
+    if index == -1:
+        return text.strip()
+    return text[index + len(marker):].lstrip('\r\n')
+
+
+def _strip_formalizer_preamble(text: str) -> str:
+    stripped = text.lstrip()
+    index = stripped.find('theorem ')
+    if index == -1:
+        return stripped
+    return stripped[index:]
 
 
 def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, informal: OpenAILLM, verifier: LeanVerifier, config: dict, prompts: PromptBank, traces_dir: Path, proofs_dir: Path, logger: RunLogger, tree: LemmaTree, parent: LemmaNode | None = None) -> RunResult:
@@ -142,15 +152,15 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
         if decision == 'continue':
             continue
         if decision == 'impossible':
-            return _finalize_failure(problem, start, verifier_error, informal_plan, lemmas, traces_dir, logger, 'marked impossible', extra_trace={'informal_decision': decision_text, 'formal_raw_output': proof_code})
+            continue
 
         if decision == 'decompose':
             lemma_text = informal.complete(prompts.informal_decision(problem, verifier_error, proof_code))
             if not lemma_text.strip():
-                return _finalize_failure(problem, start, verifier_error, informal_plan, lemmas, traces_dir, logger, 'empty lemma decomposition', extra_trace={'informal_decision': decision_text, 'formal_raw_output': proof_code})
+                continue
             lemmas = parse_lemma_list(lemma_text)[: config['workflow']['max_lemma_count']]
             if not lemmas:
-                return _finalize_failure(problem, start, verifier_error, informal_plan, lemmas, traces_dir, logger, 'failed to parse lemma list', extra_trace={'informal_decision': decision_text, 'formal_raw_output': proof_code, 'lemma_text': lemma_text})
+                continue
             lemma_nodes = tree.add_children(current_node, lemmas)
             logger.emit(problem.name, 'decompose', f'expanded into {len(lemmas)} lemmas')
 
@@ -160,12 +170,13 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                 lemma_name = f'{problem.name}__lemma_{lemma_round}'
                 try:
                     formalized_result = formalizer.formalize(problem, theorem_name=lemma_name, informal_statement=lemma)
-                    if not ensure_required_contents(formalized_result.theorem_code, ['theorem', 'by']):
+                    formalized_result_code = _strip_formalizer_preamble(formalized_result.theorem_code)
+                    if not ensure_required_contents(formalized_result_code, ['theorem', 'by']):
                         raise ValueError(f'formalizer output missing theorem/by for {lemma_name}')
                 except Exception as exc:
                     return _finalize_failure(problem, start, verifier_error, informal_plan, lemmas, traces_dir, logger, f'formalizer failed for {lemma_name}: {exc}', extra_trace={'informal_decision': decision_text, 'formal_raw_output': proof_code, 'lemma_text': lemma})
 
-                formalized_lemmas.append(formalized_result.theorem_code)
+                formalized_lemmas.append(formalized_result_code)
                 lemma_problem = Problem(
                     name=lemma_name,
                     header=problem.header,
@@ -177,7 +188,7 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                 lemma_problems.append(lemma_problem)
                 _save_trace(traces_dir, lemma_name, {
                     'source_lemma_text': lemma,
-                    'formalized_lemma': formalized_result.theorem_code,
+                    'formalized_lemma': formalized_result_code,
                     'formalizer_raw_output': formalized_result.raw_output,
                 })
 
@@ -193,10 +204,7 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
             })
 
             formal_output_raw = _fill_skeleton_with_formal(problem, formal, informal_plan, skeleton, verifier_error)
-            proof_code = formal_output_raw
-            if '```' in proof_code:
-                proof_code = proof_code.split('```lean4', 1)[-1] if '```lean4' in proof_code else proof_code.split('```lean', 1)[-1] if '```lean' in proof_code else proof_code
-                proof_code = proof_code.replace('```', '').strip()
+            proof_code = _extract_formal_output(formal_output_raw)
             verification = verifier.verify(skeleton + '\n' + proof_code)
             if verification.success:
                 proof_path = proofs_dir / f'{problem.name}.lean'
@@ -216,7 +224,9 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                 })
                 logger.emit(problem.name, 'success', f'solved in {result.elapsed_seconds:.1f}s')
                 return result
-            return _finalize_failure(problem, start, verification.output, informal_plan, lemmas, traces_dir, logger, 'proof skeleton failed after lemma decomposition', extra_trace={'informal_decision': decision_text, 'formal_raw_output_raw': formal_output_raw, 'formal_raw_output_extracted': proof_code, 'lemma_text': lemma_text, 'formalized_lemmas': formalized_lemmas, 'proof_skeleton': skeleton, 'named_lemmas': named_lemmas})
+            verifier_error = verification.output
+            logger.emit(problem.name, 'verify_fail', 'proof skeleton failed after lemma decomposition; retrying')
+            continue
 
         verifier_error = verifier_error[:4000]
 

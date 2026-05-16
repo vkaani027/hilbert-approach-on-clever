@@ -14,13 +14,11 @@ class FormalizerResult:
 
 
 def extract_lean_code(text_input: str) -> str:
-    matches = re.findall(r'```lean4\n(.*?)\n```', text_input, re.DOTALL)
-    if matches:
-        return matches[-1].strip()
-    matches = re.findall(r'```lean\n(.*?)\n```', text_input, re.DOTALL)
-    if matches:
-        return matches[-1].strip()
-    raise ValueError('formalizer output missing Lean code block')
+    marker = '### Complete Lean 4 Proof\n\nlean4'
+    index = text_input.rfind(marker)
+    if index == -1:
+        raise ValueError('formalizer output missing completion marker')
+    return text_input[index + len(marker):].lstrip('\r\n')
 
 
 class Formalizer:
