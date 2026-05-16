@@ -91,6 +91,11 @@ def _extract_formal_output(text: str) -> str:
     return extracted
 
 
+def _compose_verified_proof(header: str, proof_body: str) -> str:
+    parts = [part.strip() for part in [header, proof_body] if part and part.strip()]
+    return '\n'.join(parts)
+
+
 def _strip_formalizer_preamble(text: str) -> str:
     stripped = text.lstrip()
     index = stripped.find('theorem ')
@@ -127,16 +132,18 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                 verifier_error = 'formal proof output missing required Lean contents'
                 logger.emit(problem.name, 'verify_fail', verifier_error)
                 continue
-            verification = verifier.verify(header + '\n' + theorem + '\n' + proof_code)
+            verified_proof = _compose_verified_proof(header, proof_code)
+            verification = verifier.verify(verified_proof)
             if verification.success:
                 proof_path = proofs_dir / f'{problem.name}.lean'
-                proof_path.write_text(header + '\n' + theorem + '\n' + proof_code, encoding='utf-8')
+                proof_path.write_text(verified_proof, encoding='utf-8')
                 result = RunResult(problem.name, 'success', str(proof_path), perf_counter() - start, '')
                 _save_trace(traces_dir, problem.name, {
                     'problem': asdict(problem),
                     'informal_plan': informal_plan,
                     'formal_raw_output': formal_output_raw,
                     'formal_raw_output_extracted': proof_code,
+                    'verified_proof': verified_proof,
                     'formal_raw_output_raw': formal_output_raw,
                     'result': asdict(result),
                     'lemmas': lemmas,
@@ -209,16 +216,18 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
 
             formal_output_raw = _fill_skeleton_with_formal(problem, formal, informal_plan, skeleton, verifier_error)
             proof_code = _extract_formal_output(formal_output_raw)
-            verification = verifier.verify(skeleton + '\n' + proof_code)
+            verified_proof = _compose_verified_proof(header, proof_code)
+            verification = verifier.verify(verified_proof)
             if verification.success:
                 proof_path = proofs_dir / f'{problem.name}.lean'
-                proof_path.write_text(skeleton + '\n' + proof_code, encoding='utf-8')
+                proof_path.write_text(verified_proof, encoding='utf-8')
                 result = RunResult(problem.name, 'success', str(proof_path), perf_counter() - start, '')
                 _save_trace(traces_dir, problem.name, {
                     'problem': asdict(problem),
                     'informal_plan': informal_plan,
                     'formal_raw_output_raw': formal_output_raw,
                     'formal_raw_output_extracted': proof_code,
+                    'verified_proof': verified_proof,
                     'lemma_text': lemma_text,
                     'formalized_lemmas': formalized_lemmas,
                     'proof_skeleton': skeleton,
@@ -285,9 +294,3 @@ def run_pipeline(config):
     (output_dir / 'results.jsonl').write_text('\n'.join(json.dumps(item, ensure_ascii=False) for item in results), encoding='utf-8')
     (output_dir / 'metrics_summary.json').write_text(json.dumps({'total': len(results), 'success': sum(1 for r in results if r['status'] == 'success')}, indent=2, ensure_ascii=False), encoding='utf-8')
     logger.emit('pipeline', 'done', f'finished {len(results)} problems')
-
-
-
-
-
-
