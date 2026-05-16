@@ -14,7 +14,7 @@ formal_llm:
   api_key: "empty"
   model: "Goedel-LM/Goedel-Prover-V2-8B"
   temperature: 0.2
-  max_tokens: 2048
+  max_tokens: 8192
 
 # Remote informal model served by yunwu.ai in OpenAI-compatible format
 informal_llm:

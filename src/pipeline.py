@@ -83,10 +83,17 @@ def _fill_skeleton_with_formal(problem: Problem, formal: OpenAILLM, informal_pla
 
 def _extract_formal_output(text: str) -> str:
     marker = '### Complete Lean 4 Proof\n\nlean4'
+    fallback_marker = '### Complete Lean 4 Proof \n\n```lean4'
     index = text.rfind(marker)
+    if index != -1:
+        return text[index + len(marker):].lstrip('\r\n')
+    index = text.rfind(fallback_marker)
     if index == -1:
         return text.strip()
-    return text[index + len(marker):].lstrip('\r\n')
+    extracted = text[index + len(fallback_marker):].lstrip('\r\n')
+    if extracted.endswith('```'):
+        extracted = extracted[:-3].rstrip()
+    return extracted
 
 
 def _strip_formalizer_preamble(text: str) -> str:
