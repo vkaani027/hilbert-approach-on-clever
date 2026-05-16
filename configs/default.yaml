@@ -63,10 +63,9 @@ formalizer_llm:
   max_tokens: 4096
 
 formalizer_prompt:
-  system: "You are an expert in mathematics and Lean 4. Translate natural-language lemmas into Lean theorem statements only."
-  user_template: "Please autoformalize the following natural-language lemma in Lean 4. Use the following theorem name: {problem_name}\nThe natural-language lemma is:\n{nl_statement}\nThink before you provide the lean statement."
+  system: "You are an expert in mathematics and Lean 4. Translate natural-language lemmas into Lean theorem statements only. Output Lean code only."
+  user_template: "We are constructing a proof for the following Lean problem.\n\nCurrent Lean context:\n{header}\n\nCurrent theorem to prove:\n{theorem}\n\nOur current proof plan:\n{plan}\n\nYou should generate a Lean theorem statement for the following natural-language description:\n{nl_statement}\n\nRequirements:\n- Output only the Lean theorem statement and no explanation.\n- Make the statement compatible with the current Lean context.\n- Preserve the theorem name: {problem_name}"
   code_block_language: "lean4"
-
 
 
 

@@ -180,7 +180,14 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
             for lemma_round, (lemma, lemma_node) in enumerate(zip(lemmas[:max_lemma_rounds], lemma_nodes[:max_lemma_rounds])):
                 lemma_name = f'{problem.name}__lemma_{lemma_round}'
                 try:
-                    formalized_result = formalizer.formalize(problem, theorem_name=lemma_name, informal_statement=lemma)
+                    formalized_result = formalizer.formalize(
+                        problem,
+                        theorem_name=lemma_name,
+                        informal_statement=lemma,
+                        plan=informal_plan,
+                        header=header,
+                        theorem=theorem,
+                    )
                     formalized_result_code = _strip_formalizer_preamble(formalized_result.theorem_code)
                     if not ensure_required_contents(formalized_result_code, ['theorem', 'by']):
                         raise ValueError(f'formalizer output missing theorem/by for {lemma_name}')

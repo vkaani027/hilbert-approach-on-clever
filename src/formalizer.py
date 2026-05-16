@@ -1,6 +1,5 @@
 ﻿from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from .llm import LLMConfig, OpenAILLM
@@ -14,10 +13,13 @@ class FormalizerResult:
 
 
 def extract_lean_code(text_input: str) -> str:
-    index = text_input.find('theorem')
+    index = text_input.rfind('theorem')
     if index == -1:
         raise ValueError('formalizer output missing theorem statement')
-    return text_input[index:].lstrip('\r\n')
+    extracted = text_input[index:].lstrip('\r\n')
+    if extracted.endswith('```'):
+        extracted = extracted[:-3].rstrip()
+    return extracted
 
 
 class Formalizer:
@@ -25,10 +27,10 @@ class Formalizer:
         self.model = OpenAILLM(LLMConfig(**section))
         self.prompt_section = prompt_section
 
-    def formalize(self, problem: Problem, theorem_name: str | None = None, informal_statement: str | None = None) -> FormalizerResult:
+    def formalize(self, problem: Problem, theorem_name: str | None = None, informal_statement: str | None = None, plan: str = '', header: str = '', theorem: str = '') -> FormalizerResult:
         name = theorem_name or problem.name
         statement = informal_statement or problem.informal_prefix or problem.formal_statement
-        prompt = self.prompt_section['user_template'].format(problem_name=name, nl_statement=statement)
+        prompt = self.prompt_section['user_template'].format(problem_name=name, nl_statement=statement, plan=plan, header=header, theorem=theorem)
         messages = [
             {'role': 'system', 'content': self.prompt_section['system']},
             {'role': 'user', 'content': prompt},
