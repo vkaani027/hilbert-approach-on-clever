@@ -82,15 +82,10 @@ def _fill_skeleton_with_formal(problem: Problem, formal: OpenAILLM, informal_pla
 
 
 def _extract_formal_output(text: str) -> str:
-    marker = '### Complete Lean 4 Proof\n\nlean4'
-    fallback_marker = '### Complete Lean 4 Proof \n\n```lean4'
-    index = text.rfind(marker)
-    if index != -1:
-        return text[index + len(marker):].lstrip('\r\n')
-    index = text.rfind(fallback_marker)
+    index = text.rfind('lean4')
     if index == -1:
         return text.strip()
-    extracted = text[index + len(fallback_marker):].lstrip('\r\n')
+    extracted = text[index + len('lean4'):].lstrip('\r\n')
     if extracted.endswith('```'):
         extracted = extracted[:-3].rstrip()
     return extracted
@@ -290,7 +285,6 @@ def run_pipeline(config):
     (output_dir / 'results.jsonl').write_text('\n'.join(json.dumps(item, ensure_ascii=False) for item in results), encoding='utf-8')
     (output_dir / 'metrics_summary.json').write_text(json.dumps({'total': len(results), 'success': sum(1 for r in results if r['status'] == 'success')}, indent=2, ensure_ascii=False), encoding='utf-8')
     logger.emit('pipeline', 'done', f'finished {len(results)} problems')
-
 
 
 
