@@ -125,7 +125,9 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                 _save_trace(traces_dir, problem.name, {
                     'problem': asdict(problem),
                     'informal_plan': informal_plan,
-                    'formal_raw_output': proof_code,
+                    'formal_raw_output': formal_output_raw,
+                    'formal_raw_output_extracted': proof_code,
+                    'formal_raw_output_raw': formal_output_raw,
                     'result': asdict(result),
                     'lemmas': lemmas,
                 })
@@ -190,7 +192,8 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                 'lemmas': lemmas,
             })
 
-            proof_code = _fill_skeleton_with_formal(problem, formal, informal_plan, skeleton, verifier_error)
+            formal_output_raw = _fill_skeleton_with_formal(problem, formal, informal_plan, skeleton, verifier_error)
+            proof_code = formal_output_raw
             if '```' in proof_code:
                 proof_code = proof_code.split('```lean4', 1)[-1] if '```lean4' in proof_code else proof_code.split('```lean', 1)[-1] if '```lean' in proof_code else proof_code
                 proof_code = proof_code.replace('```', '').strip()
@@ -202,7 +205,8 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                 _save_trace(traces_dir, problem.name, {
                     'problem': asdict(problem),
                     'informal_plan': informal_plan,
-                    'formal_raw_output': proof_code,
+                    'formal_raw_output_raw': formal_output_raw,
+                    'formal_raw_output_extracted': proof_code,
                     'lemma_text': lemma_text,
                     'formalized_lemmas': formalized_lemmas,
                     'proof_skeleton': skeleton,
@@ -212,7 +216,7 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                 })
                 logger.emit(problem.name, 'success', f'solved in {result.elapsed_seconds:.1f}s')
                 return result
-            return _finalize_failure(problem, start, verification.output, informal_plan, lemmas, traces_dir, logger, 'proof skeleton failed after lemma decomposition', extra_trace={'informal_decision': decision_text, 'formal_raw_output': proof_code, 'lemma_text': lemma_text, 'formalized_lemmas': formalized_lemmas, 'proof_skeleton': skeleton, 'named_lemmas': named_lemmas})
+            return _finalize_failure(problem, start, verification.output, informal_plan, lemmas, traces_dir, logger, 'proof skeleton failed after lemma decomposition', extra_trace={'informal_decision': decision_text, 'formal_raw_output_raw': formal_output_raw, 'formal_raw_output_extracted': proof_code, 'lemma_text': lemma_text, 'formalized_lemmas': formalized_lemmas, 'proof_skeleton': skeleton, 'named_lemmas': named_lemmas})
 
         verifier_error = verifier_error[:4000]
 
@@ -267,6 +271,10 @@ def run_pipeline(config):
     (output_dir / 'results.jsonl').write_text('\n'.join(json.dumps(item, ensure_ascii=False) for item in results), encoding='utf-8')
     (output_dir / 'metrics_summary.json').write_text(json.dumps({'total': len(results), 'success': sum(1 for r in results if r['status'] == 'success')}, indent=2, ensure_ascii=False), encoding='utf-8')
     logger.emit('pipeline', 'done', f'finished {len(results)} problems')
+
+
+
+
 
 
 

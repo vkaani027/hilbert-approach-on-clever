@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -22,10 +22,16 @@ def load_problems(path: Path) -> list[Problem]:
         with path.open('r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
-                if line:
+                if not line:
+                    continue
+                try:
                     items.append(_from_dict(json.loads(line)))
+                except json.JSONDecodeError:
+                    continue
         return items
     data = json.loads(path.read_text(encoding='utf-8'))
     if isinstance(data, list):
-        return [_from_dict(item) for item in data]
-    return [_from_dict(data)]
+        return [_from_dict(item) for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        return [_from_dict(data)]
+    return []

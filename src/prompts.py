@@ -41,5 +41,15 @@ class PromptBank:
             messages.append({'role': 'assistant', 'content': self.config['prompts']['previous_attempt_prefix'] + '\n' + proof_code})
         if verifier_error:
             messages.append({'role': 'user', 'content': self.config['prompts']['verifier_error_prefix'] + '\n' + verifier_error})
-        messages.append({'role': 'user', 'content': self.config['prompts']['formal_skeleton_instruction']})
+        messages.append({
+            'role': 'user',
+            'content': (
+                self.config['prompts']['formal_skeleton_instruction'] + '\n\n'
+                'Return the final Lean code inside exactly one fenced code block formatted as:\n'
+                '```lean4\n'
+                '<Lean code here>\n'
+                '```\n'
+                'If you produce multiple code blocks, only the last one will be used.'
+            ),
+        })
         return messages
