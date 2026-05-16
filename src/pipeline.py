@@ -26,6 +26,12 @@ def _save_trace(traces_dir: Path, name: str, payload: dict) -> None:
     (traces_dir / f"{name}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
+def _save_trace_with_events(traces_dir: Path, name: str, payload: dict, logger: RunLogger) -> None:
+    payload = dict(payload)
+    payload['events'] = logger.theorem_events(name)
+    _save_trace(traces_dir, name, payload)
+
+
 def _finalize_failure(problem: Problem, start: float, verifier_error: str, informal_plan: str, lemmas: list[str], traces_dir: Path, logger: RunLogger, reason: str, status: str = 'failed', extra_trace: dict | None = None) -> RunResult:
     result = RunResult(problem.name, status, None, perf_counter() - start, reason)
     trace_payload = {
@@ -37,7 +43,7 @@ def _finalize_failure(problem: Problem, start: float, verifier_error: str, infor
     }
     if extra_trace:
         trace_payload.update(extra_trace)
-    _save_trace(traces_dir, problem.name, trace_payload)
+    _save_trace_with_events(traces_dir, problem.name, trace_payload, logger)
     logger.emit(problem.name, status, reason)
     return result
 
@@ -142,7 +148,7 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                 proof_path = proofs_dir / f'{problem.name}.lean'
                 proof_path.write_text(verified_proof, encoding='utf-8')
                 result = RunResult(problem.name, 'success', str(proof_path), perf_counter() - start, '')
-                _save_trace(traces_dir, problem.name, {
+                _save_trace_with_events(traces_dir, problem.name, {
                     'problem': asdict(problem),
                     'informal_plan': informal_plan,
                     'formal_raw_output': formal_output_raw,
@@ -208,14 +214,14 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                     extra={**problem.extra, 'source_lemma_text': lemma, 'formalizer_raw_output': formalized_result.raw_output},
                 )
                 lemma_problems.append(lemma_problem)
-                _save_trace(traces_dir, lemma_name, {
+                _save_trace_with_events(traces_dir, lemma_name, {
                     'source_lemma_text': lemma,
                     'formalized_lemma': formalized_result_code,
                     'formalizer_raw_output': formalized_result.raw_output,
                 })
 
             skeleton, named_lemmas = _make_sorry_skeleton(header, theorem, formalized_lemmas)
-            _save_trace(traces_dir, problem.name, {
+            _save_trace_with_events(traces_dir, problem.name, {
                 'problem': asdict(problem),
                 'informal_plan': informal_plan,
                 'lemma_text': lemma_text,
@@ -233,7 +239,7 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
                 proof_path = proofs_dir / f'{problem.name}.lean'
                 proof_path.write_text(verified_proof, encoding='utf-8')
                 result = RunResult(problem.name, 'success', str(proof_path), perf_counter() - start, '')
-                _save_trace(traces_dir, problem.name, {
+                _save_trace_with_events(traces_dir, problem.name, {
                     'problem': asdict(problem),
                     'informal_plan': informal_plan,
                     'formal_raw_output_raw': formal_output_raw,
@@ -294,7 +300,7 @@ def run_pipeline(config):
                     result = future.result()
                 except Exception as exc:
                     result = RunResult(problem.name, 'failed', None, 0.0, f'unhandled exception: {exc}')
-                    _save_trace(traces_dir, problem.name, {
+                    _save_trace_with_events(traces_dir, problem.name, {
                         'problem': asdict(problem),
                         'result': asdict(result),
                         'exception': repr(exc),
@@ -309,7 +315,7 @@ def run_pipeline(config):
                 result = _prove_problem(problem, formalizer, formal, informal, verifier, config.raw, prompts, traces_dir, proofs_dir, logger, tree)
             except Exception as exc:
                 result = RunResult(problem.name, 'failed', None, 0.0, f'unhandled exception: {exc}')
-                _save_trace(traces_dir, problem.name, {
+                _save_trace_with_events(traces_dir, problem.name, {
                     'problem': asdict(problem),
                     'result': asdict(result),
                     'exception': repr(exc),
