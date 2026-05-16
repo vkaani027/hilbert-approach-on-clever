@@ -120,9 +120,7 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
         for attempt_index in range(max_formal_attempts):
             logger.emit(problem.name, 'formal_attempt', f'formal attempt {attempt_index + 1}/{max_formal_attempts}')
             proof_code = formal.complete(prompts.formal_proof(problem, proof_code, verifier_error, informal_plan))
-            if '```' in proof_code:
-                proof_code = proof_code.split('```lean4', 1)[-1] if '```lean4' in proof_code else proof_code.split('```lean', 1)[-1] if '```lean' in proof_code else proof_code
-                proof_code = proof_code.replace('```', '').strip()
+            proof_code = _extract_formal_output(proof_code)
             if not ensure_required_contents(proof_code, ['by']):
                 verifier_error = 'formal proof output missing required Lean contents'
                 logger.emit(problem.name, 'verify_fail', verifier_error)
@@ -148,6 +146,10 @@ def _prove_problem(problem: Problem, formalizer: Formalizer, formal: OpenAILLM, 
 
         decision_text = informal.complete(prompts.informal_decision(problem, verifier_error, proof_code))
         decision = parse_decision(decision_text)
+        if not decision:
+            verifier_error = 'informal decision output empty or invalid'
+            logger.emit(problem.name, 'decision_fail', verifier_error)
+            continue
         logger.emit(problem.name, 'decision', f'Informal decision: {decision}')
         if decision == 'continue':
             continue

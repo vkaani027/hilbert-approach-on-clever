@@ -10,7 +10,7 @@ data:
 
 # Local formal prover model served through vLLM / OpenAI-compatible API
 formal_llm:
-  base_url: "http://0.0.0.0:8010/v1"
+  base_url: "http://127.0.0.1:8010/v1"
   api_key: "empty"
   model: "Goedel-LM/Goedel-Prover-V2-8B"
   temperature: 0.2
@@ -56,7 +56,7 @@ runtime:
 
 # Lemma formalizer: converts natural-language lemma statements into Lean theorem statements
 formalizer_llm:
-  base_url: "http://0.0.0.0:8011/v1"
+  base_url: "http://127.0.0.1:8011/v1"
   api_key: "empty"
   model: "Goedel-LM/Goedel-Formalizer-V2-8B"
   temperature: 0.9

@@ -29,10 +29,13 @@ def elapsed(start: float) -> float:
 
 
 def parse_decision(text: str) -> str:
-    first_line = text.strip().splitlines()[0].strip().upper() if text.strip() else ''
+    stripped = text.strip()
+    if not stripped:
+        return ''
+    first_line = stripped.splitlines()[0].strip().upper()
     if first_line in {'CONTINUE', 'IMPOSSIBLE', 'DECOMPOSE'}:
         return first_line.lower()
-    raise ValueError(f'invalid decision label: {first_line!r}')
+    return ''
 
 
 def parse_lemma_list(text: str) -> list[str]:

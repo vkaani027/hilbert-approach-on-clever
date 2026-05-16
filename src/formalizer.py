@@ -14,11 +14,10 @@ class FormalizerResult:
 
 
 def extract_lean_code(text_input: str) -> str:
-    marker = '### Complete Lean 4 Proof\n\nlean4'
-    index = text_input.rfind(marker)
+    index = text_input.find('theorem')
     if index == -1:
-        raise ValueError('formalizer output missing completion marker')
-    return text_input[index + len(marker):].lstrip('\r\n')
+        raise ValueError('formalizer output missing theorem statement')
+    return text_input[index:].lstrip('\r\n')
 
 
 class Formalizer:
