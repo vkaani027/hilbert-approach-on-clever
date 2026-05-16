@@ -42,6 +42,10 @@ def _finalize_failure(problem: Problem, start: float, verifier_error: str, infor
     return result
 
 
+def _save_result(output_dir: Path, result: RunResult, proof_code: str = '') -> None:
+    write_result_files(output_dir, result, proof_code)
+
+
 def _lemma_statement(name: str, statement: str) -> str:
     statement = statement.strip()
     if statement.endswith(':= by'):
@@ -286,14 +290,30 @@ def run_pipeline(config):
                 future_map[future] = (problem, tree)
             for future in as_completed(future_map):
                 problem, tree = future_map[future]
-                result = future.result()
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    result = RunResult(problem.name, 'failed', None, 0.0, f'unhandled exception: {exc}')
+                    _save_trace(traces_dir, problem.name, {
+                        'problem': asdict(problem),
+                        'result': asdict(result),
+                        'exception': repr(exc),
+                    })
                 tree.save(traces_dir / f'{problem.name}_lemma_tree.json')
                 write_result_files(output_dir, result, '')
                 results.append(asdict(result))
     else:
         for problem in problems:
             tree = LemmaTree(problem.name)
-            result = _prove_problem(problem, formalizer, formal, informal, verifier, config.raw, prompts, traces_dir, proofs_dir, logger, tree)
+            try:
+                result = _prove_problem(problem, formalizer, formal, informal, verifier, config.raw, prompts, traces_dir, proofs_dir, logger, tree)
+            except Exception as exc:
+                result = RunResult(problem.name, 'failed', None, 0.0, f'unhandled exception: {exc}')
+                _save_trace(traces_dir, problem.name, {
+                    'problem': asdict(problem),
+                    'result': asdict(result),
+                    'exception': repr(exc),
+                })
             tree.save(traces_dir / f'{problem.name}_lemma_tree.json')
             write_result_files(output_dir, result, '')
             results.append(asdict(result))
